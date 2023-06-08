@@ -1,5 +1,5 @@
 import numpy as np
-from mbe_rust.mbe_rust import epanechnikov_density_kde_2d, epanechnikov_density_kde_3d, epanechnikov_density_kde_3d_rev
+from mbe_rust.mbe_rust import epanechnikov_density_kde_2d, epanechnikov_density_kde_3d, epanechnikov_density_kde_3d_rev, epanechnikov_density_kde_3d_weights, epanechnikov_density_kde_3d_rev_weights
 
 
 class MBEdens():
@@ -20,7 +20,7 @@ class MBEdens():
     def __init__(self, X, weights=None, alpha=None, n_iter=1, n_threads=20):
 
         self.n_threads=n_threads
-        print(f"Using n_threads= {n_threads}")
+        # print(f"Using n_threads= {n_threads}")
 
         X = np.asarray(X)
         assert len(X.shape) == 2 and X.shape[0] > X.shape[1]
@@ -44,13 +44,14 @@ class MBEdens():
         self.sigmaopt = np.min(sigma)
         self.lambdaopt = np.ones(X.shape[0])
 
-        for i in range(n_iter):
-            print(f"Iterating to find density: {i+1}/{n_iter}")
+        print(f"Iterating {n_iter} to find density params")
+        for _ in range(n_iter):
+            # print(f"Iterating to find density: {i+1}/{n_iter}")
             pilot_rho = self.find_dens(X)
             g = np.exp(np.sum(np.log(pilot_rho) / N))
             new_lambdaopt = (pilot_rho / g) ** -self.alpha
-            print("med diff:", np.median(np.abs(new_lambdaopt - self.lambdaopt)))
-            print(f" min labdopt: {np.min(new_lambdaopt)}, max {np.max(new_lambdaopt)}")
+            # print("med diff:", np.median(np.abs(new_lambdaopt - self.lambdaopt)))
+            # print(f" min labdopt: {np.min(new_lambdaopt)}, max {np.max(new_lambdaopt)}")
             self.lambdaopt = new_lambdaopt
 
     def find_dens(self, X) -> np.ndarray:
@@ -58,7 +59,7 @@ class MBEdens():
         assert(n_dim==self.ndim)
         not_nan_filt = ~np.isnan(X).any(axis=1)
         if (~not_nan_filt).sum()>0:
-            print("Copying and filtering bad Jvals")
+            # print("Copying and filtering bad Jvals")
             X_filt = X[not_nan_filt,:].copy()
         else:
             X_filt = X
@@ -66,25 +67,46 @@ class MBEdens():
         if n_dim == 2:
             result = epanechnikov_density_kde_2d( X_filt, self.points, self.lambdaopt, self.sigmaopt, self.n_threads)
         elif n_dim ==3:
-            print("Finding with fallback!")
-            try:
-                result = epanechnikov_density_kde_3d_rev(
-                    X_filt,
-                    self.points,
-                    self.lambdaopt,
-                    self.sigmaopt,
-                    self.n_threads
-                )
-            except BaseException as e:
-                print("Rev kde failed, falling back to 3d")
-                # print(e)
-                result = epanechnikov_density_kde_3d(
-                    X_filt,
-                    self.points,
-                    self.lambdaopt,
-                    self.sigmaopt,
-                    self.n_threads
-                )
+            if self.weights is None:
+                try:
+                    result = epanechnikov_density_kde_3d_rev(
+                        X_filt,
+                        self.points,
+                        self.lambdaopt,
+                        self.sigmaopt,
+                        self.n_threads
+                    )
+                except BaseException as e:
+                    print("Rev kde failed, falling back to 3d")
+                    # print(e)
+                    result = epanechnikov_density_kde_3d(
+                        X_filt,
+                        self.points,
+                        self.lambdaopt,
+                        self.sigmaopt,
+                        self.n_threads
+                    )
+            else:
+                try:
+                    result = epanechnikov_density_kde_3d_rev_weights(
+                        X_filt,
+                        self.points,
+                        self.lambdaopt,
+                        self.weights,
+                        self.sigmaopt,
+                        self.n_threads
+                    )
+                except BaseException as e:
+                    print("Rev kde failed, falling back to 3d")
+                    # print(e)
+                    result = epanechnikov_density_kde_3d_weights(
+                        X_filt,
+                        self.points,
+                        self.lambdaopt,
+                        self.weights,
+                        self.sigmaopt,
+                        self.n_threads
+                    )
         else:
             raise AttributeError("n_dim not supported")
         if (~not_nan_filt).sum()>0:
