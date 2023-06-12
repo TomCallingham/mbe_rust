@@ -1,5 +1,6 @@
 import numpy as np
-from mbe_rust.mbe_rust import epanechnikov_density_kde_2d, epanechnikov_density_kde_3d, epanechnikov_density_kde_3d_rev, epanechnikov_density_kde_3d_weights, epanechnikov_density_kde_3d_rev_weights
+from mbe_rust.mbe_rust import epanechnikov_density_kde_3d, epanechnikov_density_kde_3d_rev, epanechnikov_density_kde_3d_weights, epanechnikov_density_kde_3d_rev_weights 
+from mbe_rust.mbe_rust import epanechnikov_density_kde_2d, epanechnikov_density_kde_3d_rev, epanechnikov_density_kde_3d_weights, epanechnikov_density_kde_3d_rev_weights 
 
 
 class MBEdens():
@@ -32,7 +33,7 @@ class MBEdens():
         self.alpha = 1. / d if alpha is None else alpha
 
         if weights is not None:
-            weights = np.asarray(weights)
+            weights = np.asarray(weights).astype(np.float64)
             assert len(weights) == X.shape[0]
         self.weights = weights
 
@@ -45,8 +46,8 @@ class MBEdens():
         self.lambdaopt = np.ones(X.shape[0])
 
         print(f"Iterating {n_iter} to find density params")
-        for _ in range(n_iter):
-            # print(f"Iterating to find density: {i+1}/{n_iter}")
+        for i in range(n_iter):
+            print(f"Iterating to find density: {i+1}/{n_iter}")
             pilot_rho = self.find_dens(X)
             g = np.exp(np.sum(np.log(pilot_rho) / N))
             new_lambdaopt = (pilot_rho / g) ** -self.alpha
@@ -65,7 +66,12 @@ class MBEdens():
             X_filt = X
 
         if n_dim == 2:
-            result = epanechnikov_density_kde_2d( X_filt, self.points, self.lambdaopt, self.sigmaopt, self.n_threads)
+            print("Using 2d!")
+            try:
+                result = epanechnikov_density_kde_2d_rev( X_filt, self.points, self.lambdaopt, self.sigmaopt, self.n_threads)
+            except BaseException as e:
+                result = epanechnikov_density_kde_2d( X_filt, self.points, self.lambdaopt, self.sigmaopt, self.n_threads)
+
         elif n_dim ==3:
             if self.weights is None:
                 try:
@@ -88,6 +94,7 @@ class MBEdens():
                     )
             else:
                 try:
+                    print("Using weights, py!")
                     result = epanechnikov_density_kde_3d_rev_weights(
                         X_filt,
                         self.points,
