@@ -10,7 +10,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 blas-src = "0.9.0"
-kiddo = "2.0.2"
+itertools = "0.10.5"
+kiddo = "2.1.1"
 ndarray = {version ="0.15.6", features=["rayon"]}
 ndarray-parallel = "0.9.1"
 ndarray-rand = "0.14.0"
