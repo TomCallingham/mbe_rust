@@ -39,22 +39,22 @@ pub fn multi_within_kde_3d(
     let n_groups = multi_points.len();
     let mut within_2d = Array2::from_elem((n_stars, n_groups), false);
 
-    for (mut within, points, lamdaopt) in izip!(
-        within_2d.axis_iter_mut(Axis(1)),
-        multi_points.iter(),
-        multi_lamdaopt.iter()
-    ) {
-        let max_dist2: f64 = lamdaopt.powi(2);
-        let points_shape = points.shape();
-        let n_points: usize = points_shape[0];
-        let n_dim_points: usize = points_shape[1];
-        assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
-        let mut kdtree: KdTree<f64, 3> = KdTree::with_capacity(n_points);
-        for (idx, jvec) in points.axis_iter(Axis(0)).enumerate() {
-            kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
-        }
+    create_pool(n_threads).install(|| {
+        for (mut within, points, lamdaopt) in izip!(
+            within_2d.axis_iter_mut(Axis(1)),
+            multi_points.iter(),
+            multi_lamdaopt.iter()
+        ) {
+            let max_dist2: f64 = lamdaopt.powi(2);
+            let points_shape = points.shape();
+            let n_points: usize = points_shape[0];
+            let n_dim_points: usize = points_shape[1];
+            assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+            let mut kdtree: KdTree<f64, 3> = KdTree::with_capacity(n_points);
+            for (idx, jvec) in points.axis_iter(Axis(0)).enumerate() {
+                kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+            }
 
-        create_pool(n_threads).install(|| {
             Zip::from(x.axis_iter(Axis(0)))
                 .and(&mut within)
                 .into_par_iter()
@@ -66,8 +66,8 @@ pub fn multi_within_kde_3d(
                     );
                     *point_within = neighbours.len() > 0;
                 });
-        });
-    }
+        }
+    });
 
     within_2d
 }
@@ -326,8 +326,6 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
     let w_inv_lamdaopt_pow: Array1<f64> = lamdaopt.map(|&x| x.powi(-(n_dim as i32))) * weights;
 
     let n_chunk: usize = std::cmp::max(std::cmp::min(n_stars / n_threads, 50_000), 10_000);
-    // println!("New parallel reverse fixed : {}", n_chunk);
-    // println!("threads: {}", n_threads);
 
     create_pool(n_threads).install(|| {
         x.axis_chunks_iter(Axis(0), n_chunk)
@@ -335,7 +333,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
             .zip(rhos_2d.axis_chunks_iter_mut(Axis(0), n_chunk))
             .for_each(|(x_small, mut rhos_2d_small)| {
                 // let mut stars_kdtree: KdTree<f64, 3> = KdTree::with_capacity(n_chunk);
-                let mut stars_kdtree: float_KdTree<f64, usize, 3, 128, u32> =
+                let mut stars_kdtree: float_KdTree<f64, usize, 3, 256, u32> =
                     float_KdTree::with_capacity(n_chunk);
                 for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
                     stars_kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
@@ -353,7 +351,11 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
                         );
                         for neigh in neighbours {
                             let t_2 = neigh.distance / lamda_s2;
-                            rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
+                            // rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
+                            unsafe {
+                                *rhos_2d_small.uget_mut((neigh.item, *g_ind)) +=
+                                    (1. - t_2) * w_inv_lamda;
+                            }
                         }
                     });
             });
@@ -431,7 +433,9 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
                             );
                             for neigh in neighbours {
                                 let t_2 = neigh.distance / lamda_s2;
-                                rhos_small[neigh.item] += (1. - t_2) * w_inv_lamda;
+                                // rhos_small[neigh.item] += (1. - t_2) * w_inv_lamda;
+                                    // Not much difference!
+                                unsafe{ *rhos_small.uget_mut(neigh.item) += (1. - t_2) * w_inv_lamda; }
                             }
                         });
 
