@@ -2,6 +2,7 @@ use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 mod mbe_rust_funcs;
+mod mbe_rust_funcs_2d;
 mod mbe_shaped_funcs;
 
 #[pyfunction]
@@ -28,7 +29,7 @@ fn several_mahalanobis_distance2_py<'py>(
     x: PyReadonlyArray2<f64>,
     mean: PyReadonlyArray1<f64>,
     covar: PyReadonlyArray2<f64>,
-    n_threads: usize,
+    _n_threads: usize,
 ) -> &'py PyArray1<f64> {
     let x = x.as_array();
     let mean = mean.as_array();
@@ -158,6 +159,31 @@ fn epanechnikov_density_kde_3d_rev_weights_groups_py<'py>(
 }
 
 #[pyfunction]
+#[pyo3(name = "epanechnikov_density_kde_2d_rev_weights_groups_periodic")]
+fn epanechnikov_density_kde_2d_rev_weights_groups_periodic_py<'py>(
+    py: Python<'py>,
+    x: PyReadonlyArray2<f64>,
+    points: PyReadonlyArray2<f64>,
+    lamdaopt: PyReadonlyArray1<f64>,
+    weights: PyReadonlyArray1<f64>,
+    group_inds: PyReadonlyArray1<usize>,
+    n_groups: usize,
+    sigmaopt: f64,
+    n_threads: usize,
+) -> &'py PyArray2<f64> {
+    let x = x.as_array();
+    let points = points.as_array();
+    let lamdaopt = lamdaopt.as_array();
+    let weights = weights.as_array();
+    let group_inds = group_inds.as_array();
+
+    let res = mbe_rust_funcs_2d::epanechnikov_density_kde_2d_rev_weights_groups_periodic2pi(
+        x, points, lamdaopt, weights, group_inds, n_groups, sigmaopt, n_threads,
+    );
+    res.to_pyarray(py)
+}
+
+#[pyfunction]
 #[pyo3(name = "epanechnikov_density_kde_2d_rev_weights_groups")]
 fn epanechnikov_density_kde_2d_rev_weights_groups_py<'py>(
     py: Python<'py>,
@@ -176,7 +202,7 @@ fn epanechnikov_density_kde_2d_rev_weights_groups_py<'py>(
     let weights = weights.as_array();
     let group_inds = group_inds.as_array();
 
-    let res = mbe_rust_funcs::epanechnikov_density_kde_2d_rev_weights_groups(
+    let res = mbe_rust_funcs_2d::epanechnikov_density_kde_2d_rev_weights_groups(
         x, points, lamdaopt, weights, group_inds, n_groups, sigmaopt, n_threads,
     );
     res.to_pyarray(py)
@@ -251,6 +277,10 @@ fn mbe_rust(_py: Python, m: &PyModule) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(
         epanechnikov_density_kde_2d_rev_weights_groups_py,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        epanechnikov_density_kde_2d_rev_weights_groups_periodic_py,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(multi_within_kde_3d_py, m)?)?;

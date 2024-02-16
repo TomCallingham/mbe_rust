@@ -45,7 +45,7 @@ pub fn multi_mbe_shaped_3d_within(
         let n_dim_points: usize = points_shape[1];
         assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
         let cov_inv = covar.inv().expect("Expect an Inversable covar");
-        let cov_det = covar.det().unwrap("Expect a Valid Determinant for covar");
+        let cov_det = covar.det().expect("Expect a Valid Determinant for covar");
         // for ind in within_ind.axis_iter(Axis(0)).into_par_iter() {
         for ind in within_ind.iter() {
             // for ind in within_ind.into_par_iter() {
@@ -80,7 +80,7 @@ pub fn several_mahalanobis_distance2(
         .and(&mut maha_d2_array)
         .into_par_iter()
         .for_each(|(x_row, maha_d2)| {
-            *maha_d2 = mahalanobis_distance2(&x_row, &mean, &cov_inv);
+            *maha_d2 = mahalanobis_distance2(&x_row, mean, &cov_inv);
         });
 
     maha_d2_array
@@ -92,6 +92,5 @@ fn mahalanobis_distance2(
     covariance_inv: &Array2<f64>,
 ) -> f64 {
     let x_shift = x - mean;
-    let maha_d2 = x_shift.dot(&covariance_inv.dot(&x_shift));
-    maha_d2
+    x_shift.dot(&covariance_inv.dot(&x_shift))
 }

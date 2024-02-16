@@ -1,8 +1,11 @@
-extern crate blas_src;
-use kiddo::distance::squared_euclidean;
-use kiddo::KdTree;
+use itertools::izip;
+// use kiddo::distance::squared_euclidean;
+// use kiddo::float::kdtree::KdTree;
+// use kiddo::KdTree;
+use kiddo::float::kdtree::KdTree as float_KdTree;
+use kiddo::SquaredEuclidean;
 use ndarray::parallel::prelude::*;
-use ndarray::{Array1, ArrayView1, ArrayView2, Axis, Zip};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
 use ndarray_stats::{self, QuantileExt};
 use spfunc::gamma;
 use std::f64::consts::PI;
@@ -243,4 +246,68 @@ pub fn epanechnikov_density_kde_2d_weights(
         (1. / n_points as f64) * sigmaopt.powi(-(n_dim as i32)) * (n_dim as f64 + 2.) / (2. * vd);
     rhos *= constant_factor;
     rhos
+}
+
+pub fn epanechnikov_density_kde_2d_rev_weights_groups(
+    x: ArrayView2<f64>,
+    points: ArrayView2<f64>,
+    lamdaopt: ArrayView1<f64>,
+    weights: ArrayView1<f64>,
+    group_inds: ArrayView1<usize>,
+    n_groups: usize,
+    sigmaopt: f64,
+    n_threads: usize,
+) -> Array2<f64> {
+    let x_shape = x.shape();
+    let n_stars: usize = x_shape[0];
+    let n_dim: usize = x_shape[1];
+    let points_shape = points.shape();
+    // let n_points: usize = points_shape[0];
+    let n_dim_points: usize = points_shape[1];
+    assert_eq!(n_dim, 2); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array3 is not allowed!
+
+    let mut rhos_2d = Array2::<f64>::zeros((n_stars, n_groups)); // C vs F array?
+                                                                 //
+    let lamdaopt_sigma2: Array1<f64> = lamdaopt.map(|&x| x * x * sigmaopt * sigmaopt);
+    let w_inv_lamdaopt_pow: Array1<f64> = lamdaopt.map(|&x| x.powi(-(n_dim as i32))) * weights;
+
+    let n_chunk: usize = std::cmp::max(std::cmp::min(n_stars / n_threads, 50_000), 10_000);
+    // println!("New parallel reverse fixed : {}", n_chunk);
+    // println!("threads: {}", n_threads);
+
+    create_pool(n_threads).install(|| {
+        x.axis_chunks_iter(Axis(0), n_chunk)
+            .into_par_iter()
+            .zip(rhos_2d.axis_chunks_iter_mut(Axis(0), n_chunk))
+            .for_each(|(x_small, mut rhos_2d_small)| {
+                let mut stars_kdtree: KdTree<f64, 2> = KdTree::with_capacity(n_chunk);
+                for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
+                }
+
+                Zip::from(points.axis_iter(Axis(0)))
+                    .and(&lamdaopt_sigma2)
+                    .and(&w_inv_lamdaopt_pow)
+                    .and(&group_inds)
+                    .for_each(|p_row, lamda_s2, w_inv_lamda, g_ind| {
+                        let neighbours = stars_kdtree.within_unsorted(
+                            ndarray_to_array2(p_row.to_slice().unwrap()),
+                            *lamda_s2,
+                            &squared_euclidean,
+                        );
+                        for neigh in neighbours {
+                            let t_2 = neigh.distance / lamda_s2;
+                            rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
+                        }
+                    });
+            });
+    });
+
+    //
+    let vd = PI.powf(n_dim as f64 / 2.) / gamma::gamma(n_dim as f64 / 2. + 1.);
+    rhos_2d *= sigmaopt.powi(-(n_dim as i32)) * (n_dim as f64 + 2.) / (2. * vd); //can
+                                                                                 // *(1. / n_points as f64)
+                                                                                 //include the sigmaopt earlier
+    rhos_2d
 }

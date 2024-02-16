@@ -20,14 +20,15 @@ fn create_pool(n_threads: usize) -> rayon::ThreadPool {
         .unwrap()
 }
 
-fn ndarray_to_array3(slice: &[f64]) -> &[f64; 3] {
-    unsafe { &*(slice.as_ptr() as *const [f64; 3]) }
-}
-fn new_ndarray_to_array3(array: ArrayView1<f64>) -> &[f64; 3] {
-    unsafe { &*(array.as_ptr() as *const [f64; 3]) }
+/* fn ndarray_to_array2(slice: &[f64]) -> &[f64; 2] {
+    let array_ref: &[f64; 2] = unsafe { &*(slice.as_ptr() as *const [f64; 2]) };
+    array_ref
+} */
+fn ndarray_to_array2(slice: &[f64]) -> &[f64; 2] {
+    unsafe { &*(slice.as_ptr() as *const [f64; 2]) }
 }
 
-pub fn multi_within_kde_3d(
+pub fn multi_within_kde_2d(
     x: ArrayView2<f64>,
     multi_points: Vec<ArrayView2<f64>>,
     multi_lamdaopt: Vec<f64>,
@@ -36,7 +37,7 @@ pub fn multi_within_kde_3d(
     let x_shape = x.shape();
     let n_stars: usize = x_shape[0];
     let n_dim: usize = x_shape[1];
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
 
     //
     let n_groups = multi_points.len();
@@ -52,13 +53,13 @@ pub fn multi_within_kde_3d(
             let points_shape = points.shape();
             let n_points: usize = points_shape[0];
             let n_dim_points: usize = points_shape[1];
-            assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
-                                         // let mut kdtree: KdTree<f64, 3> = KdTree::with_capacity(n_points);
-            let mut kdtree: float_KdTree<f64, usize, 3, 256, u32> =
+            assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
+                                         // let mut kdtree: KdTree<f64, 2> = KdTree::with_capacity(n_points);
+            let mut kdtree: float_KdTree<f64, usize, 2, 256, u32> =
                 float_KdTree::with_capacity(n_points);
             for (idx, jvec) in points.axis_iter(Axis(0)).enumerate() {
-                // kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
-                kdtree.add(new_ndarray_to_array3(jvec), idx)
+                kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
+                // kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
             }
 
             Zip::from(x.axis_iter(Axis(0)))
@@ -66,15 +67,13 @@ pub fn multi_within_kde_3d(
                 .into_par_iter()
                 .for_each(|(x_row, point_within)| {
                     /* let neighbours = kdtree.within_unsorted(
-                        ndarray_to_array3(x_row.to_slice().unwrap()),
+                        ndarray_to_array2(x_row.to_slice().unwrap()),
                         max_dist2,
                         &squared_euclidean,
                     ); */
-                    /* let nearest = kdtree.nearest_one::<SquaredEuclidean>(ndarray_to_array3(
+                    let nearest = kdtree.nearest_one::<SquaredEuclidean>(ndarray_to_array2(
                         x_row.to_slice().unwrap(),
-                    )); */
-                    let nearest =
-                        kdtree.nearest_one::<SquaredEuclidean>(new_ndarray_to_array3(x_row));
+                    ));
                     *point_within = nearest.distance < max_dist2;
                 });
         }
@@ -83,7 +82,7 @@ pub fn multi_within_kde_3d(
     within_2d
 }
 
-pub fn epanechnikov_density_kde_3d(
+pub fn epanechnikov_density_kde_2d(
     x: ArrayView2<f64>,
     points: ArrayView2<f64>,
     lamdaopt: ArrayView1<f64>,
@@ -98,14 +97,14 @@ pub fn epanechnikov_density_kde_3d(
     let n_points: usize = points_shape[0];
     let n_dim_points: usize = points_shape[1];
 
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
-    assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
                                  //
     let mut rhos = Array1::<f64>::zeros(n_stars);
 
-    let mut kdtree: float_KdTree<f64, usize, 3, 256, u32> = float_KdTree::with_capacity(n_points);
+    let mut kdtree: float_KdTree<f64, usize, 2, 256, u32> = float_KdTree::with_capacity(n_points);
     for (idx, jvec) in points.axis_iter(Axis(0)).enumerate() {
-        kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+        kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
     }
 
     // Could chunk to seperate max distts!
@@ -117,7 +116,7 @@ pub fn epanechnikov_density_kde_3d(
             .into_par_iter()
             .for_each(|(x_row, rho)| {
                 let neighbours = kdtree.within_unsorted::<SquaredEuclidean>(
-                    ndarray_to_array3(x_row.to_slice().unwrap()),
+                    ndarray_to_array2(x_row.to_slice().unwrap()),
                     max_dist2,
                 );
                 for neigh in neighbours {
@@ -137,7 +136,7 @@ pub fn epanechnikov_density_kde_3d(
     rhos
 }
 
-pub fn epanechnikov_density_kde_3d_weights(
+pub fn epanechnikov_density_kde_2d_weights(
     x: ArrayView2<f64>,
     points: ArrayView2<f64>,
     lamdaopt: ArrayView1<f64>,
@@ -153,14 +152,14 @@ pub fn epanechnikov_density_kde_3d_weights(
     let n_points: usize = points_shape[0];
     let n_dim_points: usize = points_shape[1];
 
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
-    assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
                                  //
     let mut rhos = Array1::<f64>::zeros(n_stars);
 
-    let mut kdtree: float_KdTree<f64, usize, 3, 256, u32> = float_KdTree::with_capacity(n_points);
+    let mut kdtree: float_KdTree<f64, usize, 2, 256, u32> = float_KdTree::with_capacity(n_points);
     for (idx, jvec) in points.axis_iter(Axis(0)).enumerate() {
-        kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+        kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
     }
 
     // Could chunk to seperate max distts!
@@ -172,7 +171,7 @@ pub fn epanechnikov_density_kde_3d_weights(
             .into_par_iter()
             .for_each(|(x_row, rho)| {
                 let neighbours = kdtree.within_unsorted::<SquaredEuclidean>(
-                    ndarray_to_array3(x_row.to_slice().unwrap()),
+                    ndarray_to_array2(x_row.to_slice().unwrap()),
                     max_dist2,
                 );
                 for neigh in neighbours {
@@ -193,7 +192,7 @@ pub fn epanechnikov_density_kde_3d_weights(
     rhos
 }
 
-pub fn epanechnikov_density_kde_3d_rev(
+pub fn epanechnikov_density_kde_2d_rev(
     x: ArrayView2<f64>,
     points: ArrayView2<f64>,
     lamdaopt: ArrayView1<f64>,
@@ -206,8 +205,8 @@ pub fn epanechnikov_density_kde_3d_rev(
     let points_shape = points.shape();
     // let n_points: usize = points_shape[0];
     let n_dim_points: usize = points_shape[1];
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
-    assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
 
     let mut rhos = Array1::<f64>::zeros(n_stars);
     let lamdaopt_sigma2: Array1<f64> = lamdaopt.map(|&x| x * x * sigmaopt * sigmaopt);
@@ -220,10 +219,10 @@ pub fn epanechnikov_density_kde_3d_rev(
             .into_par_iter()
             .zip(rhos.axis_chunks_iter_mut(Axis(0), n_chunk))
             .for_each(|(x_small, mut rhos_small)| {
-                let mut stars_kdtree: float_KdTree<f64, usize, 3, 256, u32> =
+                let mut stars_kdtree: float_KdTree<f64, usize, 2, 256, u32> =
                     float_KdTree::with_capacity(n_chunk);
                 for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
-                    stars_kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
                 }
 
                 Zip::from(points.axis_iter(Axis(0)))
@@ -231,7 +230,7 @@ pub fn epanechnikov_density_kde_3d_rev(
                     .and(&inv_lamdaopt_pow)
                     .for_each(|p_row, lamda_s2, inv_lamda| {
                         let neighbours = stars_kdtree.within_unsorted::<SquaredEuclidean>(
-                            ndarray_to_array3(p_row.to_slice().unwrap()),
+                            ndarray_to_array2(p_row.to_slice().unwrap()),
                             *lamda_s2,
                         );
                         for neigh in neighbours {
@@ -250,7 +249,7 @@ pub fn epanechnikov_density_kde_3d_rev(
     rhos
 }
 
-pub fn epanechnikov_density_kde_3d_rev_weights(
+pub fn epanechnikov_density_kde_2d_rev_weights(
     x: ArrayView2<f64>,
     points: ArrayView2<f64>,
     lamdaopt: ArrayView1<f64>,
@@ -264,8 +263,8 @@ pub fn epanechnikov_density_kde_3d_rev_weights(
     let points_shape = points.shape();
     // let n_points: usize = points_shape[0];
     let n_dim_points: usize = points_shape[1];
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
-    assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
 
     let mut rhos = Array1::<f64>::zeros(n_stars);
     let lamdaopt_sigma2: Array1<f64> = lamdaopt.map(|&x| x * x * sigmaopt * sigmaopt);
@@ -278,11 +277,11 @@ pub fn epanechnikov_density_kde_3d_rev_weights(
             .into_par_iter()
             .zip(rhos.axis_chunks_iter_mut(Axis(0), n_chunk))
             .for_each(|(x_small, mut rhos_small)| {
-                // let mut stars_kdtree: KdTree<f64, 3> = KdTree::with_capacity(n_chunk);
-                let mut stars_kdtree: float_KdTree<f64, usize, 3, 256, u32> =
+                // let mut stars_kdtree: KdTree<f64, 2> = KdTree::with_capacity(n_chunk);
+                let mut stars_kdtree: float_KdTree<f64, usize, 2, 256, u32> =
                     float_KdTree::with_capacity(n_chunk);
                 for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
-                    stars_kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
                 }
 
                 Zip::from(points.axis_iter(Axis(0)))
@@ -290,7 +289,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights(
                     .and(&w_inv_lamdaopt_pow)
                     .for_each(|p_row, lamda_s2, w_inv_lamda| {
                         let neighbours = stars_kdtree.within_unsorted::<SquaredEuclidean>(
-                            ndarray_to_array3(p_row.to_slice().unwrap()),
+                            ndarray_to_array2(p_row.to_slice().unwrap()),
                             *lamda_s2,
                         );
                         for neigh in neighbours {
@@ -309,7 +308,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights(
     rhos
 }
 
-pub fn epanechnikov_density_kde_3d_rev_weights_groups(
+pub fn epanechnikov_density_kde_2d_rev_weights_groups(
     x: ArrayView2<f64>,
     points: ArrayView2<f64>,
     lamdaopt: ArrayView1<f64>,
@@ -325,8 +324,8 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
     let points_shape = points.shape();
     // let n_points: usize = points_shape[0];
     let n_dim_points: usize = points_shape[1];
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
-    assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
 
     let mut rhos_2d = Array2::<f64>::zeros((n_stars, n_groups)); // C vs F array?
                                                                  //
@@ -340,10 +339,12 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
             .into_par_iter()
             .zip(rhos_2d.axis_chunks_iter_mut(Axis(0), n_chunk))
             .for_each(|(x_small, mut rhos_2d_small)| {
-                let mut stars_kdtree: float_KdTree<f64, usize, 3, 256, u32> =
+                // let mut stars_kdtree: KdTree<f64, 2> = KdTree::with_capacity(n_chunk);
+                // let y = rhos_2d_small;
+                let mut stars_kdtree: float_KdTree<f64, usize, 2, 256, u32> =
                     float_KdTree::with_capacity(n_chunk);
                 for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
-                    stars_kdtree.add(new_ndarray_to_array3(jvec), idx)
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
                 }
 
                 Zip::from(points.axis_iter(Axis(0)))
@@ -352,11 +353,12 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
                     .and(&group_inds)
                     .for_each(|p_row, lamda_s2, w_inv_lamda, g_ind| {
                         let neighbours = stars_kdtree.within_unsorted::<SquaredEuclidean>(
-                            new_ndarray_to_array3(p_row),
+                            ndarray_to_array2(p_row.to_slice().unwrap()),
                             *lamda_s2,
                         );
                         for neigh in neighbours {
                             let t_2 = neigh.distance / lamda_s2;
+                            // rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
                             unsafe {
                                 *rhos_2d_small.uget_mut((neigh.item, *g_ind)) +=
                                     (1. - t_2) * w_inv_lamda;
@@ -374,7 +376,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights_groups(
     rhos_2d
 }
 
-pub fn epanechnikov_density_kde_3d_rev_weights_multi(
+pub fn epanechnikov_density_kde_2d_rev_weights_multi(
     x: ArrayView2<f64>,
     multi_points: Vec<ArrayView2<f64>>,
     multi_lamdaopt: Vec<ArrayView1<f64>>,
@@ -385,7 +387,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
     let x_shape = x.shape();
     let n_stars: usize = x_shape[0];
     let n_dim: usize = x_shape[1];
-    assert_eq!(n_dim, 3); //else ndarray to array3 is not allowed!
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
 
     let n_groups = multi_points.len();
 
@@ -402,7 +404,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
     ) {
         let points_shape = points.shape();
         let n_dim_points: usize = points_shape[1];
-        assert_eq!(n_dim_points, 3); //else ndarray to array3 is not allowed!
+        assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
         multi_lamdaopt_sigma2.push(lamdaopt.map(|&x| x * x * sigmaopt * sigmaopt));
         multi_w_inv_lamdaopt_pow.push(lamdaopt.map(|&x| x.powi(-(n_dim as i32))) * weights);
     }
@@ -414,9 +416,9 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
             .into_par_iter()
             .zip(rhos_2d.axis_chunks_iter_mut(Axis(0), n_chunk))
             .for_each(|(x_small, mut rhos_2d_small)| {
-                let mut stars_kdtree: float_KdTree<f64, usize,3,256,u32> = float_KdTree::with_capacity(n_chunk);
+                let mut stars_kdtree: float_KdTree<f64, usize,2,256,u32> = float_KdTree::with_capacity(n_chunk);
                 for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
-                    stars_kdtree.add(ndarray_to_array3(jvec.to_slice().unwrap()), idx)
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
                 }
 
                 for (mut rhos_small, points, lamdaopt_sigma2, w_inv_lamdaopt_pow, sigmaopt) in izip!(
@@ -431,7 +433,7 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
                         .and(w_inv_lamdaopt_pow)
                         .for_each(|p_row, lamda_s2, w_inv_lamda| {
                             let neighbours = stars_kdtree.within_unsorted::<SquaredEuclidean>(
-                                ndarray_to_array3(p_row.to_slice().unwrap()),
+                                ndarray_to_array2(p_row.to_slice().unwrap()),
                                 *lamda_s2,
                             );
                             for neigh in neighbours {
@@ -452,5 +454,105 @@ pub fn epanechnikov_density_kde_3d_rev_weights_multi(
     let vd = PI.powf(n_dim as f64 / 2.) / gamma::gamma(n_dim as f64 / 2. + 1.);
     rhos_2d *= (n_dim as f64 + 2.) / (2. * vd); //can
                                                 //include the sigmaopt earlier
+    rhos_2d
+}
+pub fn epanechnikov_density_kde_2d_rev_weights_groups_periodic2pi(
+    x: ArrayView2<f64>,
+    points: ArrayView2<f64>,
+    lamdaopt: ArrayView1<f64>,
+    weights: ArrayView1<f64>,
+    group_inds: ArrayView1<usize>,
+    n_groups: usize,
+    sigmaopt: f64,
+    n_threads: usize,
+) -> Array2<f64> {
+    let x_shape = x.shape();
+    let n_stars: usize = x_shape[0];
+    let n_dim: usize = x_shape[1];
+    let points_shape = points.shape();
+    // let n_points: usize = points_shape[0];
+    let n_dim_points: usize = points_shape[1];
+    assert_eq!(n_dim, 2); //else ndarray to array2 is not allowed!
+    assert_eq!(n_dim_points, 2); //else ndarray to array2 is not allowed!
+
+    let mut rhos_2d = Array2::<f64>::zeros((n_stars, n_groups)); // C vs F array?
+                                                                 //
+    let lamdaopt_sigma2: Array1<f64> = lamdaopt.map(|&x| x * x * sigmaopt * sigmaopt);
+    let w_inv_lamdaopt_pow: Array1<f64> = lamdaopt.map(|&x| x.powi(-(n_dim as i32))) * weights;
+
+    let n_chunk: usize = std::cmp::max(std::cmp::min(n_stars / n_threads, 50_000), 10_000);
+
+    create_pool(n_threads).install(|| {
+        x.axis_chunks_iter(Axis(0), n_chunk)
+            .into_par_iter()
+            .zip(rhos_2d.axis_chunks_iter_mut(Axis(0), n_chunk))
+            .for_each(|(x_small, mut rhos_2d_small)| {
+                // let mut stars_kdtree: KdTree<f64, 2> = KdTree::with_capacity(n_chunk);
+                let mut stars_kdtree: float_KdTree<f64, usize, 2, 256, u32> =
+                    float_KdTree::with_capacity(n_chunk);
+                for (idx, jvec) in x_small.axis_iter(Axis(0)).enumerate() {
+                    stars_kdtree.add(ndarray_to_array2(jvec.to_slice().unwrap()), idx)
+                }
+
+                Zip::from(points.axis_iter(Axis(0)))
+                    .and(&lamdaopt_sigma2)
+                    .and(&w_inv_lamdaopt_pow)
+                    .and(&group_inds)
+                    .for_each(|p_row, lamda_s2, w_inv_lamda, g_ind| {
+                        let array_prow = ndarray_to_array2(p_row.clone().to_slice().unwrap());
+
+                        let neighbours =
+                            stars_kdtree.within_unsorted::<SquaredEuclidean>(array_prow, *lamda_s2);
+                        for neigh in neighbours {
+                            let t_2 = neigh.distance / lamda_s2;
+                            // rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
+                            unsafe {
+                                *rhos_2d_small.uget_mut((neigh.item, *g_ind)) +=
+                                    (1. - t_2) * w_inv_lamda;
+                            }
+                        }
+
+                        let mut repeats: [bool; 3] = [false; 3];
+                        // let mut periodic_array_prows: [[f64; 2]; 3] = [array_prow.clone(); 3];
+                        let mut periodic_array_prows: [[f64; 2]; 3] = [*array_prow; 3];
+
+                        for i in [0, 1] {
+                            if array_prow[i] < 0.5 {
+                                repeats[i] = true;
+                                periodic_array_prows[i][i] = array_prow[i] + 2. * PI;
+                            } else if array_prow[0] > (2. * PI) - 0.5 {
+                                repeats[i] = true;
+                                periodic_array_prows[i][i] = array_prow[i] - 2. * PI;
+                            };
+                        }
+
+                        if repeats[0] && repeats[1] {
+                            repeats[2] = true;
+                            periodic_array_prows[2] =
+                                [periodic_array_prows[0][0], periodic_array_prows[1][1]];
+                        }
+                        for (&repeat, &prow) in repeats.iter().zip(periodic_array_prows.iter()) {
+                            if repeat {
+                                let neighbours = stars_kdtree
+                                    .within_unsorted::<SquaredEuclidean>(&prow, *lamda_s2);
+                                for neigh in neighbours {
+                                    let t_2 = neigh.distance / lamda_s2;
+                                    // rhos_2d_small[(neigh.item, *g_ind)] += (1. - t_2) * w_inv_lamda;
+                                    unsafe {
+                                        *rhos_2d_small.uget_mut((neigh.item, *g_ind)) +=
+                                            (1. - t_2) * w_inv_lamda;
+                                    }
+                                }
+                            }
+                        }
+                    });
+            });
+    });
+
+    //
+    let vd = PI.powf(n_dim as f64 / 2.) / gamma::gamma(n_dim as f64 / 2. + 1.);
+    rhos_2d *= sigmaopt.powi(-(n_dim as i32)) * (n_dim as f64 + 2.) / (2. * vd); //can
+                                                                                 // *(1. / n_points as f64)
+                                                                                 //include the sigmaopt earlier
     rhos_2d
 }
